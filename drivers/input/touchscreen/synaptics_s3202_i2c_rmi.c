@@ -50,7 +50,7 @@
 #include <linux/wakelock.h>
 
 /******************* tp function switch **************************/
-#define TP_UPDATE_FIRMWARE  1
+#define TP_UPDATE_FIRMWARE  0
 #define SUPPORT_DOUBLE_TAP  1
 /*****************************************************************/
 
@@ -58,7 +58,6 @@
 #include "synaptics_firmware_wintek.h"
 #include "synaptics_firmware_tpk.h"
 #define TP_UPDATE_RLE_FILE	"tpupdate.rle"
-#define TP_UPDATE_FIRMWARE  0
 extern int display_rle_file(char *filename);
 
 #include "synaptics_test_rawdata.h"
