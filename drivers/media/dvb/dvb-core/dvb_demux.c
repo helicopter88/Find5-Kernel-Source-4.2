@@ -708,6 +708,11 @@ void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const u8 *buf,
 			     (feed->feed.ts.is_filtering))
 			dvb_dmx_swfilter_output_packet(feed, buf, timestamp);
 	}
+
+	spin_unlock(&demux->lock);
+
+	if (dvb_demux_performancecheck)
+		demux->total_process_time += dvb_dmx_calc_time_delta(pre_time);
 }
 EXPORT_SYMBOL(dvb_dmx_swfilter_packet);
 

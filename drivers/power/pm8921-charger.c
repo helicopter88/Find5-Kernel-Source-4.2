@@ -3872,10 +3872,8 @@ bool is_usb_dc_plugged_in(void)
 	struct pm8921_chg_chip *chip= the_chip;
 	return is_usb_chg_plugged_in(chip) || is_dc_chg_plugged_in(chip);
 }
-extern void cancel_charger_type_detect_work(void);
 static void cancel_charge_det_worker(struct work_struct *work)
 {
-	cancel_charger_type_detect_work();
 }
 #endif
 /*OPPO,Jiangsm add end*/

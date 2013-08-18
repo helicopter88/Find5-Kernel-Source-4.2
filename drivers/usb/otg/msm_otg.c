@@ -70,33 +70,6 @@
 #define USB_PHY_VDD_DIG_VOL_MIN	1045000 /* uV */
 #define USB_PHY_VDD_DIG_VOL_MAX	1320000 /* uV */
 
-/* OPPO 2012-08-08 chendx Add begin for reason */
-#define USB_NONSTANDARD_DET_DELAY	msecs_to_jiffies(1500)
-
-static int cancel_nonstandard_worker = 0;
-/* OPPO 2012-08-08 chendx Add end */
-/*OPPO, 2013-5-11 jiangsm add for chg type detect*/
-void cancel_nonstandard_worker_fn(char *fn_str)
-{
-	pr_err("%s:called from fun :%s\n", __func__,fn_str);
-	if (cancel_nonstandard_worker)
-		return;
-	else
-		cancel_nonstandard_worker = 1;
-}
-void enable_nonstandard_worker_fn(char *fn_str)
-{
-	pr_err("%s:called from fun :%s\n", __func__, fn_str);
-	if (!cancel_nonstandard_worker)
-		return;
-	else
-		cancel_nonstandard_worker = 0;
-}
-bool is_nonstandard_worker_canceled(void)
-{
-	return cancel_nonstandard_worker ? true : false;
-}
-/*OPPO, 2013-5-11 jiangsm add end*/
 static DECLARE_COMPLETION(pmic_vbus_init);
 static struct msm_otg *the_msm_otg;
 static bool debug_aca_enabled;
@@ -111,11 +84,6 @@ static struct regulator *mhl_usb_hs_switch;
 static struct power_supply *psy;
 
 static bool aca_id_turned_on;
-
-/* OPPO 2012-08-13 chendx Add begin for chg detect */
-struct completion chg_detect_wait;
-/* OPPO 2012-08-13 chendx Add end */
-
 static inline bool aca_enabled(void)
 {
 #ifdef CONFIG_USB_MSM_ACA
@@ -124,24 +92,6 @@ static inline bool aca_enabled(void)
 	return debug_aca_enabled;
 #endif
 }
-/* OPPO 2012-08-08 chendx Add begin for msm-otg debug log */
-/*#undef pr_debug 
-#define pr_debug(fmt, ...) printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)*/
-
-static int logo_level  = 3;
-
-#define DEBUG_ERROR     1
-#define DEBUG_INFO           2
-#define DEBUG_TRACE          3
-
-#define print_msm_otg(level, ...) \
-	do { \
-		if (logo_level  >= (level)) \
-			printk(__VA_ARGS__); \
-	} while (0) 
-
-extern int pm8921_chg_connected(enum usb_chg_type chg_type);
-/* OPPO 2012-08-08 chendx Add end */
 
 static const int vdd_val[VDD_TYPE_MAX][VDD_VAL_MAX] = {
 		{  /* VDD_CX CORNER Voting */
@@ -183,8 +133,8 @@ static int msm_hsusb_ldo_init(struct msm_otg *motg, int init)
 		rc = regulator_set_voltage(hsusb_1p8, USB_PHY_1P8_VOL_MIN,
 				USB_PHY_1P8_VOL_MAX);
 		if (rc) {
-			dev_err(motg->phy.dev, "unable to set voltage level for"
-					"hsusb 1p8\n");
+			dev_err(motg->phy.dev, "unable to set voltage level "
+					"for hsusb 1p8\n");
 			goto put_1p8;
 		}
 
@@ -237,7 +187,7 @@ static int msm_hsusb_ldo_enable(struct msm_otg *motg, int on)
 		ret = regulator_set_optimum_mode(hsusb_1p8,
 				USB_PHY_1P8_HPM_LOAD);
 		if (ret < 0) {
-			pr_err("%s: Unable to set HPM of the regulator:"
+			pr_err("%s: Unable to set HPM of the regulator "
 				"HSUSB_1p8\n", __func__);
 			return ret;
 		}
@@ -253,7 +203,7 @@ static int msm_hsusb_ldo_enable(struct msm_otg *motg, int on)
 		ret = regulator_set_optimum_mode(hsusb_3p3,
 				USB_PHY_3P3_HPM_LOAD);
 		if (ret < 0) {
-			pr_err("%s: Unable to set HPM of the regulator:"
+			pr_err("%s: Unable to set HPM of the regulator "
 				"HSUSB_3p3\n", __func__);
 			regulator_set_optimum_mode(hsusb_1p8, 0);
 			regulator_disable(hsusb_1p8);
@@ -280,7 +230,7 @@ static int msm_hsusb_ldo_enable(struct msm_otg *motg, int on)
 
 		ret = regulator_set_optimum_mode(hsusb_1p8, 0);
 		if (ret < 0)
-			pr_err("%s: Unable to set LPM of the regulator:"
+			pr_err("%s: Unable to set LPM of the regulator "
 				"HSUSB_1p8\n", __func__);
 
 		ret = regulator_disable(hsusb_3p3);
@@ -291,7 +241,7 @@ static int msm_hsusb_ldo_enable(struct msm_otg *motg, int on)
 		}
 		ret = regulator_set_optimum_mode(hsusb_3p3, 0);
 		if (ret < 0)
-			pr_err("%s: Unable to set LPM of the regulator:"
+			pr_err("%s: Unable to set LPM of the regulator "
 				"HSUSB_3p3\n", __func__);
 	}
 
@@ -1142,16 +1092,9 @@ static int msm_otg_notify_chg_type(struct msm_otg *motg)
 		motg->chg_type == USB_ACA_C_CHARGER))
 		charger_type = POWER_SUPPLY_TYPE_USB_ACA;
 	else
-		charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+		charger_type = POWER_SUPPLY_TYPE_BATTERY;
 
-/* OPPO 2012-12-06 chendx Modify begin for not set power supply type */
-		//XXX we report support from pm8921-charger.c
-#ifndef CONFIG_VENDOR_EDIT
 	return pm8921_set_usb_power_supply_type(charger_type);
-#else
-	return 0;
-#endif
-/* OPPO 2012-12-06 chendx Modify end */
 }
 
 static int msm_otg_notify_power_supply(struct msm_otg *motg, unsigned mA)
@@ -1171,6 +1114,8 @@ static int msm_otg_notify_power_supply(struct msm_otg *motg, unsigned mA)
 		return 0;
 	}
 	/* Set max current limit */
+	dev_info(motg->phy.dev, "current: %d -> %d (mA)\n",
+			motg->cur_power, mA);
 	if (power_supply_set_current_limit(psy, 1000*mA))
 		goto psy_not_supported;
 
@@ -1195,11 +1140,6 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 			mA > IDEV_ACA_CHG_LIMIT)
 		mA = IDEV_ACA_CHG_LIMIT;
 
-/* OPPO 2013-05-17 wangjc Add begin for reason */
-	if(motg->chg_type == USB_SDP_CHARGER)
-		mA = IDEV_CHG_MIN;
-/* OPPO 2013-05-17 wangjc Add end */
-
 	if (msm_otg_notify_chg_type(motg))
 		dev_err(motg->phy.dev,
 			"Failed notifying %d charger type to PMIC\n",
@@ -1210,12 +1150,8 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 
 	dev_info(motg->phy.dev, "Avail curr from USB = %u\n", mA);
 
-	/*
-	 *  Use Power Supply API if supported, otherwise fallback
-	 *  to legacy pm8921 API.
-	 */
-	if (msm_otg_notify_power_supply(motg, mA))
-		pm8921_charger_vbus_draw(mA);
+	pm8921_charger_vbus_draw(mA);
+	msm_otg_notify_power_supply(motg, mA);
 
 	motg->cur_power = mA;
 }
@@ -1224,24 +1160,6 @@ static int msm_otg_set_power(struct usb_phy *phy, unsigned mA)
 {
 	struct msm_otg *motg = container_of(phy, struct msm_otg, phy);
 
-	/* OPPO 2012-08-09 chendx Add begin for nonstanard detect */
-	/**
-	*  When VBUS set power,detect charger type is USB_SDP_CHARGER otherwise 
-	*  charger type is USB_NON_DCP_CHARGER
-	*/
-	print_msm_otg(DEBUG_TRACE, "%s type:%d,current=%dmA\n", 
-				__func__, motg->chg_type,mA);
-#if 0	
-	cancel_nonstandard_worker =1;
-#else
-	cancel_nonstandard_worker_fn("msm_otg_set_power");
-#endif
-	if (motg->chg_type != USB_SDP_CHARGER){
-		motg->chg_type = USB_SDP_CHARGER;
-		pm8921_chg_connected(USB_SDP_CHARGER);
-	}
-	/* OPPO 2012-08-09 chendx Add end */
-	
 	/*
 	 * Gadget driver uses set_power method to notify about the
 	 * available current based on suspend/configured states.
@@ -1525,7 +1443,7 @@ static void msm_otg_start_peripheral(struct usb_otg *otg, int on)
 }
 
 static int msm_otg_set_peripheral(struct usb_otg *otg,
-			struct usb_gadget *gadget)
+					struct usb_gadget *gadget)
 {
 	struct msm_otg *motg = container_of(otg->phy, struct msm_otg, phy);
 
@@ -1731,9 +1649,6 @@ static bool msm_chg_aca_detect(struct msm_otg *motg)
 			dev_dbg(phy->dev, "ID_GND\n");
 			motg->chg_type = USB_INVALID_CHARGER;
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
-			/* OPPO 2012-08-07 chendx Add begin for reason */
-			pm8921_chg_connected(USB_INVALID_CHARGER);
-			/* OPPO 2012-08-07 chendx Add end */
 			clear_bit(ID_A, &motg->inputs);
 			clear_bit(ID_B, &motg->inputs);
 			clear_bit(ID_C, &motg->inputs);
@@ -2122,10 +2037,6 @@ static void msm_ta_detect_work(struct work_struct *w)
 
 	pr_debug("msm_ta_detect_work: ta detection work\n");
 
-/* OPPO 2013-05-17 wangjc Add begin for reason */
-	return;
-/* OPPO 2013-05-17 wangjc Add end */
-
 	/* Presence of FRame Index or FRINDEX rollover implies USB communication */
 	if( (readl(USB_FRINDEX) != 0) || ( readl(USB_USBSTS) & (1<<3) ) ) {
 		pr_info("msm_ta_detect_work: USB exit ta detection - frindex\n");
@@ -2283,59 +2194,6 @@ static void msm_chg_detect_work(struct work_struct *w)
 	queue_delayed_work(system_nrt_wq, &motg->chg_work, delay);
 }
 
-/* OPPO 2012-08-09 chendx Add begin for nonstanard detect */
-/**
-*  NON-STANDARD and USB detect is not good!!
-*  Todo
-*/
-/*OPPO,Jiangsm add begin for charger type detect,2013-1-24*/
-#ifdef CONFIG_VENDOR_EDIT
-extern bool is_usb_dc_plugged_in(void);
-#endif
-/*OPPO,Jiangsm add end*/
-static void nonstandard_detect_work(struct work_struct *w)
-{
-	struct msm_otg *motg = container_of(w, struct msm_otg, nonstandard_detect_work.work);
-
-	pr_info("%s,%d\n", __func__,cancel_nonstandard_worker);
-
-	if(false == is_nonstandard_worker_canceled()) 
-	{
-		/* OPPO 2012-08-13 chendx Add begin for wait hdmi irq  */
-        if (!wait_for_completion_timeout(&chg_detect_wait,
-			 msecs_to_jiffies(700))){
-             pr_info("Timed out waiting for HDMI wait\n");
-		     motg->chg_type = USB_NON_DCP_CHARGER;
-          }else{
-              pr_info("waiting for HDMI IRQ\n");
-              motg->chg_type = USB_HDMI_CHARGER;
-         }
-/*OPPO,Jiangsm add begin for charger type detect,2013-1-24*/
-#ifdef CONFIG_VENDOR_EDIT
-		if (false == is_usb_dc_plugged_in()){
-			motg->chg_type = USB_INVALID_CHARGER;
-			msm_otg_notify_charger(motg, 0);
-			pm8921_chg_connected(motg->chg_type);
-			goto out ;
-		}	
-#endif
-/*OPPO,Jiangsm add end*/
-		/* OPPO 2012-08-13 chendx Add end */
-		msm_otg_notify_charger(motg,
-							IDEV_CHG_MIN);
-		pm8921_chg_connected(motg->chg_type);
-	}else if (motg->chg_type != USB_SDP_CHARGER){
-			pr_err("%s:usb seems not enumerated yet in time,but we got info from udc_irq that it is usb charger \n", __func__);
-			motg->chg_type = USB_SDP_CHARGER;
-			msm_otg_notify_charger(motg, IDEV_CHG_MIN);
-			pm8921_chg_connected(motg->chg_type);
-			goto out ;
-	}
-out:
-	enable_nonstandard_worker_fn("nonstandard_detect_work");
-}
-/* OPPO 2012-08-09 chendx Add end */
-
 /*
  * We support OTG, Peripheral only and Host only configurations. In case
  * of OTG, mode switch (host-->peripheral/peripheral-->host) can happen
@@ -2407,16 +2265,7 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 		break;
 	}
 }
-/*OPPO,Jiangsm add begin for providing for charger module using,2013-1-22*/
-#ifdef CONFIG_VENDOR_EDIT
-void cancel_charger_type_detect_work(void)
-{
-	struct msm_otg * motg=the_msm_otg;
-	cancel_delayed_work_sync(&motg->nonstandard_detect_work);
-	cancel_delayed_work_sync(&motg->chg_work);
-}
-#endif
-/*OPPO,Jiangsm add end*/
+
 static void msm_otg_sm_work(struct work_struct *w)
 {
 	struct msm_otg *motg = container_of(w, struct msm_otg, sm_work);
@@ -2467,27 +2316,14 @@ static void msm_otg_sm_work(struct work_struct *w)
 				msm_chg_detect_work(&motg->chg_work.work);
 				break;
 			case USB_CHG_STATE_DETECTED:
-				#ifdef CONFIG_VENDOR_EDIT
-				/* OPPO 2012-12-05 chendx Add begin for debug log */
-				pr_info("motg->chg_type =%d\n",motg->chg_type);
-				/* OPPO 2012-12-05 chendx Add end */
-				#endif
 				switch (motg->chg_type) {
 				case USB_DCP_CHARGER:
 					/* Enable VDP_SRC */
 					ulpi_write(otg->phy, 0x2, 0x85);
 					/* fall through */
-					/* OPPO 2012-08-07 chendx Add begin for reason */
-					pm8921_chg_connected(USB_DCP_CHARGER);
-					/* OPPO 2012-08-07 chendx Add end */
 				case USB_PROPRIETARY_CHARGER:
 					msm_otg_notify_charger(motg,
 							IDEV_CHG_MAX);
-					#ifdef CONFIG_VENDOR_EDIT
-					/* OPPO 2012-08-07 chendx Add begin for proprietary charger */
-					pm8921_chg_connected(USB_DCP_CHARGER);
-					/* OPPO 2012-08-07 chendx Add end */
-					#endif
 					pm_runtime_put_noidle(otg->phy->dev);
 					pm_runtime_suspend(otg->phy->dev);
 					break;
@@ -2514,19 +2350,13 @@ static void msm_otg_sm_work(struct work_struct *w)
 						OTG_STATE_B_PERIPHERAL;
 					break;
 				case USB_SDP_CHARGER:
+					msm_otg_notify_charger(motg,
+							IDEV_CHG_MIN);
 					if(!slimport_is_connected()) {
 						msm_otg_start_peripheral(otg, 1);
 						otg->phy->state =
 							OTG_STATE_B_PERIPHERAL;
 					}
-						/* OPPO 2012-08-09 chendx Add begin for SDP and NON-standard detect */
-#if 0
-					cancel_nonstandard_worker = 0;
-#endif
-					motg->chg_type = USB_NON_DCP_CHARGER;
-					cancel_delayed_work_sync(&motg->nonstandard_detect_work);
-					schedule_delayed_work(&motg->nonstandard_detect_work, USB_NONSTANDARD_DET_DELAY);
-					/* OPPO 2012-08-09 chendx Add end */
 					schedule_delayed_work(&motg->check_ta_work,
 						MSM_CHECK_TA_DELAY);
 					break;
@@ -2554,10 +2384,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			cancel_delayed_work_sync(&motg->check_ta_work);
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
 			motg->chg_type = USB_INVALID_CHARGER;
-			msm_otg_notify_charger(motg, 0);				
-			/* OPPO 2013-03-11 chendx Add begin for charger remove */
-			pm8921_chg_connected(USB_INVALID_CHARGER);
-			/* OPPO 2013-03-11 chendx Add end */
+			msm_otg_notify_charger(motg, 0);
 			msm_otg_reset(otg->phy);
 			/*
 			 * There is a small window where ID interrupt
@@ -3045,10 +2872,10 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 
 	if ((otgsc & OTGSC_IDIS) && (otgsc & OTGSC_IDIE)) {
 		if (otgsc & OTGSC_ID) {
-			pr_debug("Id set\n");
+			dev_dbg(otg->phy->dev, "ID set\n");
 			set_bit(ID, &motg->inputs);
 		} else {
-			pr_debug("Id clear\n");
+			dev_dbg(otg->phy->dev, "ID clear\n");
 			/*
 			 * Assert a_bus_req to supply power on
 			 * VBUS when Micro/Mini-A cable is connected
@@ -3077,10 +2904,10 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 			!test_bit(ID_A, &motg->inputs))
 			return IRQ_HANDLED;
 		if (otgsc & OTGSC_BSV) {
-			pr_debug("BSV set\n");
+			dev_dbg(otg->phy->dev, "BSV set\n");
 			set_bit(B_SESS_VLD, &motg->inputs);
 		} else {
-			pr_debug("BSV clear\n");
+			dev_dbg(otg->phy->dev, "BSV clear\n");
 			clear_bit(B_SESS_VLD, &motg->inputs);
 			clear_bit(A_BUS_SUSPEND, &motg->inputs);
 
@@ -3267,9 +3094,9 @@ static irqreturn_t msm_pmic_id_irq(int irq, void *data)
 static int msm_otg_mode_show(struct seq_file *s, void *unused)
 {
 	struct msm_otg *motg = s->private;
-	struct usb_phy *phy = &motg->phy;
+	struct usb_otg *otg = motg->phy.otg;
 
-	switch (phy->state) {
+	switch (otg->phy->state) {
 	case OTG_STATE_A_HOST:
 		seq_printf(s, "host\n");
 		break;
@@ -3889,9 +3716,6 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	INIT_WORK(&motg->sm_work, msm_otg_sm_work);
 	INIT_DELAYED_WORK(&motg->chg_work, msm_chg_detect_work);
 	INIT_DELAYED_WORK(&motg->pmic_id_status_work, msm_pmic_id_status_w);
-	/* OPPO 2012-08-09 chendx Add begin for nonstanard detect */
-	INIT_DELAYED_WORK(&motg->nonstandard_detect_work, nonstandard_detect_work);
-	/* OPPO 2012-08-09 chendx Add end */
 	INIT_DELAYED_WORK(&motg->check_ta_work, msm_ta_detect_work);
 	setup_timer(&motg->id_timer, msm_otg_id_timer_func,
 				(unsigned long) motg);
@@ -3962,10 +3786,6 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	if (ret)
 		dev_dbg(&pdev->dev, "mode debugfs file is"
 			"not available\n");
-
-	/* OPPO 2012-08-13 chendx Add begin for reason */
-	init_completion(&chg_detect_wait);
-	/* OPPO 2012-08-13 chendx Add end */
 
 	if (motg->pdata->otg_control == OTG_PMIC_CONTROL)
 		pm8921_charger_register_vbus_sn(&msm_otg_set_vbus_state);
@@ -4045,10 +3865,10 @@ free_motg:
 static int __devexit msm_otg_remove(struct platform_device *pdev)
 {
 	struct msm_otg *motg = platform_get_drvdata(pdev);
-	struct usb_otg *otg = motg->phy.otg;
+	struct usb_phy *phy = &motg->phy;
 	int cnt = 0;
 
-	if (otg->host || otg->gadget)
+	if (phy->otg->host || phy->otg->gadget)
 		return -EBUSY;
 
 	if (pdev->dev.of_node)
@@ -4081,8 +3901,8 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 	/*
 	 * Put PHY in low power mode.
 	 */
-	ulpi_read(otg->phy, 0x14);
-	ulpi_write(otg->phy, 0x08, 0x09);
+	ulpi_read(phy, 0x14);
+	ulpi_write(phy, 0x08, 0x09);
 
 	writel(readl(USB_PORTSC) | PORTSC_PHCD, USB_PORTSC);
 	while (cnt < PHY_SUSPEND_TIMEOUT_USEC) {
@@ -4092,7 +3912,7 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 		cnt++;
 	}
 	if (cnt >= PHY_SUSPEND_TIMEOUT_USEC)
-		dev_err(otg->phy->dev, "Unable to suspend PHY\n");
+		dev_err(phy->dev, "Unable to suspend PHY\n");
 
 	clk_disable_unprepare(motg->pclk);
 	clk_disable_unprepare(motg->core_clk);

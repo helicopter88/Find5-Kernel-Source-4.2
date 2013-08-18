@@ -1584,6 +1584,232 @@ static int strtobyte(const char *data, u8 *value)
 
 static int mxt_load_fw(struct device *dev, const char *fn)
 {
+	struct i2c_client *client = data->client;
+	struct mxt_object *t7_object;
+	struct mxt_object *t9_object;
+	struct mxt_object *t15_object;
+	struct mxt_object *t42_object;
+	int error;
+
+	/* Store T7 and T9 locally, used in suspend/resume operations */
+	t7_object = mxt_get_object(data, MXT_GEN_POWER_T7);
+	if (!t7_object) {
+		dev_err(&client->dev, "Failed to get T7 object\n");
+		return -EINVAL;
+	}
+
+	data->t7_start_addr = t7_object->start_address;
+	error = __mxt_read_reg(client, data->t7_start_addr,
+				T7_DATA_SIZE, data->t7_data);
+	if (error < 0) {
+		dev_err(&client->dev,
+			"Failed to save current power state\n");
+		return error;
+	}
+
+	/* Store T9, T15's min and max report ids */
+	t9_object = mxt_get_object(data, MXT_TOUCH_MULTI_T9);
+	if (!t9_object) {
+		dev_err(&client->dev, "Failed to get T9 object\n");
+		return -EINVAL;
+	}
+	data->t9_max_reportid = t9_object->max_reportid;
+	data->t9_min_reportid = t9_object->max_reportid -
+					t9_object->num_report_ids + 1;
+
+	if (data->pdata->key_codes) {
+		t15_object = mxt_get_object(data, MXT_TOUCH_KEYARRAY_T15);
+		if (!t15_object)
+			dev_dbg(&client->dev, "T15 object is not available\n");
+		else {
+			data->t15_max_reportid = t15_object->max_reportid;
+			data->t15_min_reportid = t15_object->max_reportid -
+						t15_object->num_report_ids + 1;
+		}
+	}
+
+	/* Store T42 min and max report ids */
+	t42_object = mxt_get_object(data, MXT_PROCI_TOUCHSUPPRESSION_T42);
+	if (!t42_object)
+		dev_dbg(&client->dev, "T42 object is not available\n");
+	else {
+		data->t42_max_reportid = t42_object->max_reportid;
+		data->t42_min_reportid = t42_object->max_reportid -
+					t42_object->num_report_ids + 1;
+	}
+
+	return 0;
+}
+
+static int mxt_initialize(struct mxt_data *data)
+{
+	struct i2c_client *client = data->client;
+	struct mxt_info *info = &data->info;
+	int error;
+	u8 val;
+	const u8 *cfg_ver;
+
+	error = mxt_get_info(data);
+	if (error) {
+		/* Try bootloader mode */
+		error = mxt_switch_to_bootloader_address(data);
+		if (error)
+			return error;
+
+		error = mxt_check_bootloader(client, MXT_APP_CRC_FAIL);
+		if (error)
+			return error;
+
+		dev_err(&client->dev, "Application CRC failure\n");
+		data->state = BOOTLOADER;
+
+		return 0;
+	}
+
+	dev_info(&client->dev,
+			"Family ID: %d Variant ID: %d Version: %d.%d "
+			"Build: 0x%02X Object Num: %d\n",
+			info->family_id, info->variant_id,
+			info->version >> 4, info->version & 0xf,
+			info->build, info->object_num);
+
+	data->state = APPMODE;
+
+	data->object_table = kcalloc(info->object_num,
+				     sizeof(struct mxt_object),
+				     GFP_KERNEL);
+	if (!data->object_table) {
+		dev_err(&client->dev, "Failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	/* Get object table information */
+	error = mxt_get_object_table(data);
+	if (error)
+		goto free_object_table;
+
+	/* Get config data from platform data */
+	error = mxt_get_config(data);
+	if (error)
+		dev_dbg(&client->dev, "Config info not found.\n");
+
+	/* Check register init values */
+	if (data->config_info && data->config_info->config) {
+		if (data->update_cfg) {
+			error = mxt_check_reg_init(data);
+			if (error) {
+				dev_err(&client->dev,
+					"Failed to check reg init value\n");
+				goto free_object_table;
+			}
+
+			error = mxt_backup_nv(data);
+			if (error) {
+				dev_err(&client->dev, "Failed to back up NV\n");
+				goto free_object_table;
+			}
+
+			cfg_ver = data->config_info->config +
+							data->cfg_version_idx;
+			dev_info(&client->dev,
+				"Config updated from %d.%d.%d to %d.%d.%d\n",
+				data->cfg_version[0], data->cfg_version[1],
+				data->cfg_version[2],
+				cfg_ver[0], cfg_ver[1], cfg_ver[2]);
+
+			memcpy(data->cfg_version, cfg_ver, MXT_CFG_VERSION_LEN);
+		}
+	} else {
+		dev_info(&client->dev,
+			"No cfg data defined, skipping check reg init\n");
+	}
+
+	error = mxt_save_objects(data);
+	if (error)
+		goto free_object_table;
+
+	/* Update matrix size at info struct */
+	error = mxt_read_reg(client, MXT_MATRIX_X_SIZE, &val);
+	if (error)
+		goto free_object_table;
+	info->matrix_xsize = val;
+
+	error = mxt_read_reg(client, MXT_MATRIX_Y_SIZE, &val);
+	if (error)
+		goto free_object_table;
+	info->matrix_ysize = val;
+
+	dev_info(&client->dev,
+			"Matrix X Size: %d Matrix Y Size: %d\n",
+			info->matrix_xsize, info->matrix_ysize);
+
+	return 0;
+
+free_object_table:
+	kfree(data->object_table);
+	return error;
+}
+
+static ssize_t mxt_object_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct mxt_data *data = dev_get_drvdata(dev);
+	struct mxt_object *object;
+	int count = 0;
+	int i, j;
+	int error;
+	u8 val;
+
+	for (i = 0; i < data->info.object_num; i++) {
+		object = data->object_table + i;
+
+		count += snprintf(buf + count, PAGE_SIZE - count,
+				"Object[%d] (Type %d)\n",
+				i + 1, object->type);
+		if (count >= PAGE_SIZE)
+			return PAGE_SIZE - 1;
+
+		if (!mxt_object_readable(object->type)) {
+			count += snprintf(buf + count, PAGE_SIZE - count,
+					"\n");
+			if (count >= PAGE_SIZE)
+				return PAGE_SIZE - 1;
+			continue;
+		}
+
+		for (j = 0; j < object->size + 1; j++) {
+			error = mxt_read_object(data,
+						object->type, j, &val);
+			if (error)
+				return error;
+
+			count += snprintf(buf + count, PAGE_SIZE - count,
+					"\t[%2d]: %02x (%d)\n", j, val, val);
+			if (count >= PAGE_SIZE)
+				return PAGE_SIZE - 1;
+		}
+
+		count += snprintf(buf + count, PAGE_SIZE - count, "\n");
+		if (count >= PAGE_SIZE)
+			return PAGE_SIZE - 1;
+	}
+
+	return count;
+}
+
+static int strtobyte(const char *data, u8 *value)
+{
+	char str[3];
+
+	str[0] = data[0];
+	str[1] = data[1];
+	str[2] = '\0';
+
+	return kstrtou8(str, 16, value);
+}
+
+static int mxt_load_fw(struct device *dev, const char *fn)
+{
 	struct mxt_data *data = dev_get_drvdata(dev);
 	struct i2c_client *client = data->client;
 	const struct firmware *fw = NULL;

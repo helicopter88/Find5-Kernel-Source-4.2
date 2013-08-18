@@ -322,17 +322,14 @@ static int hw_device_init(void __iomem *base)
  */
 static int hw_device_reset(struct ci13xxx *udc)
 {
-	int delay_count = 25; /* 250 usec */
-
 	/* should flush & stop before reset */
 	hw_cwrite(CAP_ENDPTFLUSH, ~0, ~0);
 	hw_cwrite(CAP_USBCMD, USBCMD_RS, 0);
 
 	hw_cwrite(CAP_USBCMD, USBCMD_RST, USBCMD_RST);
-	while (delay_count--  && hw_cread(CAP_USBCMD, USBCMD_RST))
-		udelay(10);
-	if (delay_count < 0)
-		pr_err("USB controller reset failed\n");
+	while (hw_cread(CAP_USBCMD, USBCMD_RST))
+		udelay(10);             /* not RTOS friendly */
+
 
 	if (udc->udc_driver->notify_event)
 		udc->udc_driver->notify_event(udc,
@@ -795,8 +792,6 @@ static int hw_usb_set_address(u8 value)
  */
 static int hw_usb_reset(void)
 {
-	int delay_count = 10; /* 100 usec delay */
-
 	hw_usb_set_address(0);
 
 	/* ESS flushes only at end?!? */
@@ -809,10 +804,8 @@ static int hw_usb_reset(void)
 	hw_cwrite(CAP_ENDPTCOMPLETE,  0,  0);   /* writes its content */
 
 	/* wait until all bits cleared */
-	while (delay_count-- && hw_cread(CAP_ENDPTPRIME, ~0))
-		udelay(10);
-	if (delay_count < 0)
-		pr_err("ENDPTPRIME is not cleared during bus reset\n");
+	while (hw_cread(CAP_ENDPTPRIME, ~0))
+		udelay(10);             /* not RTOS friendly */
 
 	/* reset all endpoints ? */
 
@@ -1393,9 +1386,6 @@ static ssize_t show_registers(struct device *dev,
 		dev_err(dev, "[%s] EINVAL\n", __func__);
 		return 0;
 	}
-	dump = kmalloc(2048, GFP_KERNEL);
-	if (dump == NULL)
-		return -ENOMEM;
 
 	dump = kmalloc(sizeof(u32) * DUMP_ENTRIES, GFP_KERNEL);
 	if (!dump) {
@@ -2030,7 +2020,18 @@ static int _hardware_dequeue(struct ci13xxx_ep *mEp, struct ci13xxx_req *mReq)
 	if (mReq->zptr) {
 		if ((TD_STATUS_ACTIVE & mReq->zptr->token) != 0)
 			return -EBUSY;
-		dma_pool_free(mEp->td_pool, mReq->zptr, mReq->zdma);
+
+		/* The controller may access this dTD one more time.
+		 * Defer freeing this to next zero length dTD completion.
+		 * It is safe to assume that controller will no longer
+		 * access the previous dTD after next dTD completion.
+		 */
+		if (mEp->last_zptr)
+			dma_pool_free(mEp->td_pool, mEp->last_zptr,
+					mEp->last_zdma);
+		mEp->last_zptr = mReq->zptr;
+		mEp->last_zdma = mReq->zdma;
+
 		mReq->zptr = NULL;
 	}
 
@@ -2182,9 +2183,10 @@ static int _gadget_stop_activity(struct usb_gadget *gadget)
 	usb_ep_fifo_flush(&udc->ep0out.ep);
 	usb_ep_fifo_flush(&udc->ep0in.ep);
 
-	if (udc->status != NULL) {
-		usb_ep_free_request(&udc->ep0in.ep, udc->status);
-		udc->status = NULL;
+	if (udc->ep0in.last_zptr) {
+		dma_pool_free(udc->ep0in.td_pool, udc->ep0in.last_zptr,
+				udc->ep0in.last_zdma);
+		udc->ep0in.last_zptr = NULL;
 	}
 
 	return 0;
@@ -2228,10 +2230,6 @@ __acquires(udc->lock)
 	retval = hw_usb_reset();
 	if (retval)
 		goto done;
-
-	udc->status = usb_ep_alloc_request(&udc->ep0in.ep, GFP_ATOMIC);
-	if (udc->status == NULL)
-		retval = -ENOMEM;
 
 	spin_lock(udc->lock);
 
@@ -2301,8 +2299,8 @@ static void isr_get_status_complete(struct usb_ep *ep, struct usb_request *req)
 		return;
 	}
 
-	kfree(req->buf);
-	usb_ep_free_request(ep, req);
+	if (req->status)
+		err("GET_STATUS failed");
 }
 
 /**
@@ -2318,8 +2316,7 @@ __releases(mEp->lock)
 __acquires(mEp->lock)
 {
 	struct ci13xxx_ep *mEp = &udc->ep0in;
-	struct usb_request *req = NULL;
-	gfp_t gfp_flags = GFP_ATOMIC;
+	struct usb_request *req = udc->status;
 	int dir, num, retval;
 
 	trace("%p, %p", mEp, setup);
@@ -2327,19 +2324,9 @@ __acquires(mEp->lock)
 	if (mEp == NULL || setup == NULL)
 		return -EINVAL;
 
-	spin_unlock(mEp->lock);
-	req = usb_ep_alloc_request(&mEp->ep, gfp_flags);
-	spin_lock(mEp->lock);
-	if (req == NULL)
-		return -ENOMEM;
-
 	req->complete = isr_get_status_complete;
 	req->length   = 2;
-	req->buf      = kzalloc(req->length, gfp_flags);
-	if (req->buf == NULL) {
-		retval = -ENOMEM;
-		goto err_free_req;
-	}
+	req->buf      = udc->status_buf;
 
 	if ((setup->bRequestType & USB_RECIP_MASK) == USB_RECIP_DEVICE) {
 		if (setup->wIndex == OTG_STATUS_SELECTOR) {
@@ -2362,18 +2349,7 @@ __acquires(mEp->lock)
 	/* else do nothing; reserved for future use */
 
 	spin_unlock(mEp->lock);
-	retval = usb_ep_queue(&mEp->ep, req, gfp_flags);
-	spin_lock(mEp->lock);
-	if (retval)
-		goto err_free_buf;
-
-	return 0;
-
- err_free_buf:
-	kfree(req->buf);
- err_free_req:
-	spin_unlock(mEp->lock);
-	usb_ep_free_request(&mEp->ep, req);
+	retval = usb_ep_queue(&mEp->ep, req, GFP_ATOMIC);
 	spin_lock(mEp->lock);
 	return retval;
 }
@@ -2416,11 +2392,9 @@ __acquires(mEp->lock)
 	trace("%p", udc);
 
 	mEp = (udc->ep0_dir == TX) ? &udc->ep0out : &udc->ep0in;
-	if (udc->status) {
-		udc->status->context = udc;
-		udc->status->complete = isr_setup_status_complete;
-	} else
-		return -EINVAL;
+	udc->status->context = udc;
+	udc->status->complete = isr_setup_status_complete;
+	udc->status->length = 0;
 
 	spin_unlock(mEp->lock);
 	retval = usb_ep_queue(&mEp->ep, udc->status, GFP_ATOMIC);
@@ -2854,6 +2828,12 @@ static int ep_disable(struct usb_ep *ep)
 
 	} while (mEp->dir != direction);
 
+	if (mEp->last_zptr) {
+		dma_pool_free(mEp->td_pool, mEp->last_zptr,
+				mEp->last_zdma);
+		mEp->last_zptr = NULL;
+	}
+
 	mEp->desc = NULL;
 	mEp->ep.desc = NULL;
 
@@ -3278,6 +3258,7 @@ static int ci13xxx_pullup(struct usb_gadget *_gadget, int is_active)
 static int ci13xxx_start(struct usb_gadget_driver *driver,
 		int (*bind)(struct usb_gadget *));
 static int ci13xxx_stop(struct usb_gadget_driver *driver);
+
 /**
  * Device operations part of the API to the USB controller hardware,
  * which don't involve endpoints (or i/o)
@@ -3390,6 +3371,14 @@ static int ci13xxx_start(struct usb_gadget_driver *driver,
 	retval = usb_ep_enable(&udc->ep0in.ep);
 	if (retval)
 		return retval;
+	udc->status = usb_ep_alloc_request(&udc->ep0in.ep, GFP_KERNEL);
+	if (!udc->status)
+		return -ENOMEM;
+	udc->status_buf = kzalloc(2, GFP_KERNEL); /* for GET_STATUS */
+	if (!udc->status_buf) {
+		usb_ep_free_request(&udc->ep0in.ep, udc->status);
+		return -ENOMEM;
+	}
 	spin_lock_irqsave(udc->lock, flags);
 
 	udc->gadget.ep0 = &udc->ep0in.ep;
@@ -3468,6 +3457,10 @@ static int ci13xxx_stop(struct usb_gadget_driver *driver)
 	driver->unbind(&udc->gadget);               /* MAY SLEEP */
 	spin_lock_irqsave(udc->lock, flags);
 
+	usb_ep_free_request(&udc->ep0in.ep, udc->status);
+	kfree(udc->status_buf);
+	udc->status_buf = NULL;
+
 	udc->gadget.dev.driver = NULL;
 
 	/* free resources */
@@ -3507,7 +3500,6 @@ static int ci13xxx_stop(struct usb_gadget_driver *driver)
  * This function returns IRQ_HANDLED if the IRQ has been handled
  * It locks access to registers
  */
-extern void cancel_nonstandard_worker_fn(char *fn_str);
 static irqreturn_t udc_irq(void)
 {
 	struct ci13xxx *udc = _udc;
@@ -3539,9 +3531,6 @@ static irqreturn_t udc_irq(void)
 		/* order defines priority - do NOT change it */
 		if (USBi_URI & intr) {
 			isr_statistics.uri++;
-#if 1//add for chg type detect ,2013-5-11,jiangsm
-			cancel_nonstandard_worker_fn("udc_irq");
-#endif
 			isr_reset_handler(udc);
 		}
 		if (USBi_PCI & intr) {

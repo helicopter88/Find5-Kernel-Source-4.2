@@ -161,7 +161,8 @@ static inline int adb_lock(atomic_t *excl)
 
 static inline void adb_unlock(atomic_t *excl)
 {
-	atomic_dec(excl);
+	if (atomic_dec_return(excl) < 0)
+		atomic_inc(excl);
 }
 
 /* add a request to the tail of a list */
@@ -303,7 +304,7 @@ static ssize_t adb_read(struct file *fp, char __user *buf,
 requeue_req:
 	/* queue a request */
 	req = dev->rx_req;
-	req->length = count;
+	req->length = ADB_BULK_BUFFER_SIZE;
 	dev->rx_done = 0;
 	ret = usb_ep_queue(dev->ep_out, req, GFP_ATOMIC);
 	if (ret < 0) {
