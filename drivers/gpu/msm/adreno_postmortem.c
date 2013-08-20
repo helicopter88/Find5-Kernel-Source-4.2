@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,6 +21,7 @@
 #include "adreno_ringbuffer.h"
 #include "kgsl_cffdump.h"
 #include "kgsl_pwrctrl.h"
+#include "adreno_trace.h"
 
 #include "a2xx_reg.h"
 #include "a3xx_reg.h"
@@ -724,6 +725,9 @@ int adreno_dump(struct kgsl_device *device, int manual)
 	kgsl_regread(device, REG_CP_IB2_BASE, &cp_ib2_base);
 	kgsl_regread(device, REG_CP_IB2_BUFSZ, &cp_ib2_bufsz);
 
+	trace_adreno_gpu_fault(rbbm_status, cp_rb_rptr, cp_rb_wptr,
+			cp_ib1_base, cp_ib1_bufsz, cp_ib2_base, cp_ib2_bufsz);
+
 	/* If postmortem dump is not enabled, dump minimal set and return */
 	if (!device->pm_dump_enable) {
 
@@ -740,7 +744,9 @@ int adreno_dump(struct kgsl_device *device, int manual)
 			(unsigned int *) &context_id,
 			KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL,
 				current_context));
-	context = idr_find(&device->context_idr, context_id);
+
+	context = kgsl_context_get(device, context_id);
+
 	if (context) {
 		ts_processed = kgsl_readtimestamp(device, context,
 						  KGSL_TIMESTAMP_RETIRED);
@@ -748,6 +754,8 @@ int adreno_dump(struct kgsl_device *device, int manual)
 				context->id, ts_processed);
 	} else
 		KGSL_LOG_DUMP(device, "BAD CTXT: %d\n", context_id);
+
+	kgsl_context_put(context);
 
 	num_item = adreno_ringbuffer_count(&adreno_dev->ringbuffer,
 						cp_rb_rptr);
@@ -899,5 +907,9 @@ int adreno_dump(struct kgsl_device *device, int manual)
 error_vfree:
 	vfree(rb_copy);
 end:
+	/* Restart the dispatcher after a manually triggered dump */
+	if (manual)
+		adreno_dispatcher_start(adreno_dev);
+
 	return result;
 }
