@@ -31,6 +31,7 @@
 #include <linux/msm_ion.h>
 #include <linux/memory.h>
 #include <linux/memblock.h>
+#include <linux/msm_ion.h>
 #include <linux/msm_thermal.h>
 #include <linux/i2c/atmel_mxt_ts.h>
 #include <linux/cyttsp-qc.h>
@@ -46,7 +47,6 @@
 
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
-#include <mach/ion.h>
 #include <linux/usb/msm_hsusb.h>
 #include <linux/usb/android.h>
 #include <mach/socinfo.h>
