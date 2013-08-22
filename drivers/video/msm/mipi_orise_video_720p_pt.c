@@ -17,21 +17,21 @@
 
 static struct msm_panel_info pinfo;
 
-static struct mipi_dsi_phy_ctrl dsi_video_mode_phy_db = {
-    /* regulator */
-	{0x03, 0x0a, 0x04, 0x00, 0x20},
-	/* timing */
-	{0x83, 0x31, 0x13, 0x00, 0x42, 0x4d, 0x18, 0x35,
-	0x21, 0x03, 0x04, 0xa0},
-    /* phy ctrl */
-	{0x5f, 0x00, 0x00, 0x10},
-    /* strength */
-	{0xff, 0x00, 0x06, 0x00},
-	/* pll control */
-	{0x0, 0x0e, 0x30, 0xc0, 0x00, 0x40, 0x03, 0x62,
-	0x40, 0x07, 0x07,
-	0x00, 0x1a, 0x00, 0x00, 0x02, 0x00, 0x20, 0x00, 0x01 },
-};
+static struct mipi_dsi_phy_ctrl dsi_video_mode_phy_db_1080p = { 
+	/* regulator */ 
+	{0x09, 0x08, 0x05, 0x00, 0x20},
+	/* timing */ 
+	{0xe9, 0x5e, 0x2c, 0x00, 0x7b, 0x7c, 0x30, 0x61, 
+	0x42, 0x03, 0x04, 0xa0}, 
+	/* phy ctrl */ 
+	{0x5f, 0x00, 0x00, 0x10}, 
+	/* strength */ 
+	{0xff, 0x00, 0x06, 0x00}, 
+	/* pll control */ 
+	{0x0, 0x49, 0x30, 0xc4, 0x00, 0x20, 0x07, 0x62,
+	0x41, 0x0f, 0x01, 
+	0x00, 0x14, 0x03, 0x00, 0x02, 0x00, 0x20, 0x00, 0x01 }, 
+}; 
 
 static int __init mipi_video_orise_720p_pt_init(void)
 {
@@ -40,25 +40,25 @@ static int __init mipi_video_orise_720p_pt_init(void)
 	if (msm_fb_detect_client("mipi_video_orise_720p"))
 		return 0;
 
-	pinfo.xres = 720;
-	pinfo.yres = 1280;
+	pinfo.xres = 1080;
+	pinfo.yres = 1920;
 	pinfo.lcdc.xres_pad = 0;
 	pinfo.lcdc.yres_pad = 0;
 
 	pinfo.type = MIPI_VIDEO_PANEL;
 	pinfo.pdest = DISPLAY_1;
 	pinfo.wait_cycle = 0;
-	pinfo.bpp = 24;
-	pinfo.lcdc.h_back_porch = 160;
-	pinfo.lcdc.h_front_porch = 160;
-	pinfo.lcdc.h_pulse_width = 8;
-	pinfo.lcdc.v_back_porch = 32;
-	pinfo.lcdc.v_front_porch = 32;
-	pinfo.lcdc.v_pulse_width = 1;
+	pinfo.bpp = 24;		
+		pinfo.lcdc.h_back_porch = 101;//100;//80;		
+		pinfo.lcdc.h_front_porch = 130;//120		
+		pinfo.lcdc.h_pulse_width = 8;		
+		pinfo.lcdc.v_back_porch = 4;	//must > 4,Otherwise,it will increase the burden of clock	huyu		
+		pinfo.lcdc.v_front_porch = 3;		
+		pinfo.lcdc.v_pulse_width = 1;//2;		
 	pinfo.lcdc.border_clr = 0;	/* blk */
 	pinfo.lcdc.underflow_clr = 0xff;	/* blue */
 	pinfo.lcdc.hsync_skew = 0;
-	pinfo.bl_max = 200;
+	pinfo.bl_max = 127;
 	pinfo.bl_min = 1;
 	pinfo.fb_num = 2;
 
@@ -77,13 +77,13 @@ static int __init mipi_video_orise_720p_pt_init(void)
 	pinfo.mipi.data_lane1 = TRUE;
 	pinfo.mipi.data_lane2 = TRUE;
 	pinfo.mipi.data_lane3 = TRUE;
-	pinfo.mipi.t_clk_post = 0x04;
-	pinfo.mipi.t_clk_pre = 0x1c;
+	pinfo.mipi.t_clk_post = 0x25;
+	pinfo.mipi.t_clk_pre = 0x36;
 	pinfo.mipi.stream = 0; /* dma_p */
 	pinfo.mipi.mdp_trigger = 0;
 	pinfo.mipi.dma_trigger = DSI_CMD_TRIGGER_SW;
-	pinfo.mipi.frame_rate = 55;
-	pinfo.mipi.dsi_phy_db = &dsi_video_mode_phy_db;
+	pinfo.mipi.frame_rate = 60;
+	pinfo.mipi.dsi_phy_db = &dsi_video_mode_phy_db_1080p;
 	pinfo.mipi.tx_eot_append = TRUE;
 	pinfo.mipi.esc_byte_ratio = 4;
 
