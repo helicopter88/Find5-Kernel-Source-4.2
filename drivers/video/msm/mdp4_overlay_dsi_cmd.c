@@ -1236,11 +1236,7 @@ void mdp4_dsi_cmd_overlay(struct msm_fb_data_type *mfd)
 	}
 
 	mdp4_overlay_mdp_perf_upd(mfd, 1);
-<<<<<<< HEAD
-	mdp4_dsi_cmd_pipe_commit(cndx, 1);
-=======
 	mdp4_dsi_cmd_pipe_commit(cndx, 1, NULL);
->>>>>>> e0b287a... msm: display: command mode panel release fence
 	mdp4_overlay_mdp_perf_upd(mfd, 0);
 	mutex_unlock(&mfd->dma->ov_mutex);
 
