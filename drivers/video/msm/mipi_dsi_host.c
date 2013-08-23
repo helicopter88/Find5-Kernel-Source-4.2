@@ -973,6 +973,33 @@ void mipi_dsi_controller_cfg(int enable)
 
 	uint32 dsi_ctrl;
 	uint32 status;
+/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
+#ifndef CONFIG_VENDOR_EDIT	
+	int cnt;
+
+	cnt = 16;
+	while (cnt--) {
+		status = MIPI_INP(MIPI_DSI_BASE + 0x0004);
+		status &= 0x02;		/* CMD_MODE_DMA_BUSY */
+		if (status == 0)
+			break;
+		usleep(1000);
+	}
+	if (cnt == 0)
+		pr_info("%s: DSI status=%x failed\n", __func__, status);
+
+	cnt = 16;
+	while (cnt--) {
+		status = MIPI_INP(MIPI_DSI_BASE + 0x0008);
+		status &= 0x11111000;	/* x_HS_FIFO_EMPTY */
+		if (status == 0x11111000)	/* all empty */
+			break;
+		usleep(1000);
+	}
+
+	if (cnt == 0)
+		pr_info("%s: FIFO status=%x failed\n", __func__, status);
+#else
 	u32 sleep_us = 1000;
 	u32 timeout_us = 16000;
 
@@ -996,6 +1023,8 @@ void mipi_dsi_controller_cfg(int enable)
 			   ((status & 0x08) == 0),
 			       sleep_us, timeout_us))
 		pr_info("%s: DSI status=%x failed\n", __func__, status);
+#endif
+/* OPPO 2012-11-30 huyu modify for boot LOGO bluescreen*/
 
 	dsi_ctrl = MIPI_INP(MIPI_DSI_BASE + 0x0000);
 	if (enable)
@@ -1181,6 +1210,62 @@ int mipi_dsi_cmds_tx(struct dsi_buf *tp, struct dsi_cmd_desc *cmds, int cnt)
 			msleep(cm->wait);
 		cm++;
 	}
+
+	if (video_mode)
+		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, dsi_ctrl); /* restore */
+
+	return cnt;
+}
+
+/*
+ * mipi_dsi_cmds_single_tx:
+ * thread context only
+ */
+int mipi_dsi_cmds_single_tx(struct dsi_buf *tp, struct dsi_cmd_desc *cmds,
+								int cnt)
+{
+	struct dsi_cmd_desc *cm;
+	uint32 dsi_ctrl, ctrl;
+	int i, j = 0, k = 0, cmd_len = 0, video_mode;
+	char *cmds_tx;
+	char *bp;
+
+	if (tp == NULL || cmds == NULL) {
+		pr_err("%s: Null commands", __func__);
+		return -EINVAL;
+	}
+
+	/* turn on cmd mode
+	* for video mode, do not send cmds more than
+	* one pixel line, since it only transmit it
+	* during BLLP.
+	*/
+	dsi_ctrl = MIPI_INP(MIPI_DSI_BASE + 0x0000);
+	video_mode = dsi_ctrl & 0x02; /* VIDEO_MODE_EN */
+	if (video_mode) {
+		ctrl = dsi_ctrl | 0x04; /* CMD_MODE_EN */
+		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, ctrl);
+	}
+
+	cm = cmds;
+	cmds_tx = kmalloc((DSI_BUF_SIZE + DSI_HOST_HDR_SIZE) * cnt, GFP_KERNEL);
+	mipi_dsi_buf_init(tp);
+	mipi_dsi_enable_irq(DSI_CMD_TERM);
+	for (i = 0; i < cnt; i++) {
+		mipi_dsi_buf_init(tp);
+		mipi_dsi_cmd_dma_add(tp, cm);
+		bp = tp->data;
+		for (j = 0; j < tp->len; j++) {
+			*(cmds_tx + k) = *bp++;
+			k++;
+		}
+		cmd_len = cmd_len + tp->len;
+		cm++;
+	}
+	tp->data = cmds_tx;
+	tp->len = cmd_len;
+	mipi_dsi_cmd_dma_tx(tp);
+	kfree(cmds_tx);
 
 	if (video_mode)
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, dsi_ctrl); /* restore */
@@ -1558,7 +1643,10 @@ void mipi_dsi_cmdlist_tx(struct dcs_cmd_req *req)
 
 	mipi_dsi_buf_init(&dsi_tx_buf);
 	tp = &dsi_tx_buf;
-	ret = mipi_dsi_cmds_tx(tp, req->cmds, req->cmds_cnt);
+	if (req->flags & CMD_REQ_SINGLE_TX)
+		ret = mipi_dsi_cmds_single_tx(tp, req->cmds, req->cmds_cnt);
+	else
+		ret = mipi_dsi_cmds_tx(tp, req->cmds, req->cmds_cnt);
 
 	if (req->cb)
 		req->cb(ret);

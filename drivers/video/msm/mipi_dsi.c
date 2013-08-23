@@ -43,8 +43,15 @@ static boolean tlmm_settings = FALSE;
 static int mipi_dsi_probe(struct platform_device *pdev);
 static int mipi_dsi_remove(struct platform_device *pdev);
 
+/* OPPO 2013-02-04 zhengzk Modify begin for ESD */
+#ifndef CONFIG_VENDOR_EDIT
 static int mipi_dsi_off(struct platform_device *pdev);
 static int mipi_dsi_on(struct platform_device *pdev);
+#else
+int mipi_dsi_off(struct platform_device *pdev);
+int mipi_dsi_on(struct platform_device *pdev);
+#endif
+/* OPPO 2013-02-04 zhengzk Modify end */
 static int mipi_dsi_fps_level_change(struct platform_device *pdev,
 					u32 fps_level);
 
@@ -72,8 +79,13 @@ static int mipi_dsi_fps_level_change(struct platform_device *pdev,
 	mipi_dsi_configure_fb_divider(fps_level);
 	return 0;
 }
-
+/* OPPO 2013-02-04 zhengzk Modify begin for ESD */
+#ifndef CONFIG_VENDOR_EDIT
 static int mipi_dsi_off(struct platform_device *pdev)
+#else
+int mipi_dsi_off(struct platform_device *pdev)
+#endif
+/* OPPO 2013-02-04 zhengzk Modify end */
 {
 	int ret = 0;
 	struct msm_fb_data_type *mfd;
@@ -142,7 +154,13 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	return ret;
 }
 
+/* OPPO 2013-02-04 zhengzk Modify begin for reason */
+#ifndef CONFIG_VENDOR_EDIT
 static int mipi_dsi_on(struct platform_device *pdev)
+#else
+int mipi_dsi_on(struct platform_device *pdev)
+#endif
+/* OPPO 2013-02-04 zhengzk Modify end */
 {
 	int ret = 0;
 	u32 clk_rate;
@@ -268,8 +286,7 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	else
 		down(&mfd->dma->mutex);
 
-	if (mfd->op_enable)
-		ret = panel_next_on(pdev);
+	ret = panel_next_on(pdev);
 
 	mipi_dsi_op_mode_config(mipi->mode);
 
@@ -346,6 +363,11 @@ static int mipi_dsi_late_init(struct platform_device *pdev)
 
 
 static int mipi_dsi_resource_initialized;
+/* OPPO 2013-02-04 zhengzk Add begin for reason */
+#ifdef CONFIG_VENDOR_EDIT
+struct platform_device *g_mdp_dev = NULL;
+#endif
+/* OPPO 2013-02-04 zhengzk Add end */
 
 static int mipi_dsi_probe(struct platform_device *pdev)
 {
@@ -438,11 +460,13 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 
 		if (mipi_dsi_pdata->splash_is_enabled &&
 			!mipi_dsi_pdata->splash_is_enabled()) {
+			mipi_dsi_prepare_clocks();
 			mipi_dsi_ahb_ctrl(1);
 			MIPI_OUTP(MIPI_DSI_BASE + 0x118, 0);
 			MIPI_OUTP(MIPI_DSI_BASE + 0x0, 0);
 			MIPI_OUTP(MIPI_DSI_BASE + 0x200, 0);
 			mipi_dsi_ahb_ctrl(0);
+			mipi_dsi_unprepare_clocks();
 		}
 		mipi_dsi_resource_initialized = 1;
 
@@ -469,6 +493,11 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 	mdp_dev = platform_device_alloc("mdp", pdev->id);
 	if (!mdp_dev)
 		return -ENOMEM;
+	/* OPPO 2013-02-04 zhengzk Add begin for reason */
+#ifdef CONFIG_VENDOR_EDIT
+	g_mdp_dev = mdp_dev;
+#endif
+	/* OPPO 2013-02-04 zhengzk Add end */
 
 	/*
 	 * link to the latest pdev
@@ -603,6 +632,11 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 		goto mipi_dsi_probe_err;
 
 	pdev_list[pdev_list_cnt++] = pdev;
+
+	esc_byte_ratio = pinfo->mipi.esc_byte_ratio;
+
+	if (!mfd->cont_splash_done)
+		cont_splash_clk_ctrl(1);
 
 return 0;
 
