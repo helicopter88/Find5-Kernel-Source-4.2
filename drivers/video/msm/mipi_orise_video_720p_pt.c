@@ -18,6 +18,7 @@
 static struct msm_panel_info pinfo;
 
 static struct mipi_dsi_phy_ctrl dsi_video_mode_phy_db_1080p = { 
+	/* 1920*1200, RGB888, 4 Lane 60 fps video mode */ 
 	/* regulator */ 
 	{0x09, 0x08, 0x05, 0x00, 0x20},
 	/* timing */ 
@@ -48,13 +49,18 @@ static int __init mipi_video_orise_720p_pt_init(void)
 	pinfo.type = MIPI_VIDEO_PANEL;
 	pinfo.pdest = DISPLAY_1;
 	pinfo.wait_cycle = 0;
-	pinfo.bpp = 24;		
+	pinfo.bpp = 24;
+#if 1		
+	/* OPPO 2013-03-07 Gousj Modify begin for solve the issue of lack of virtical pixel. */	
+		//Gousj modified  h_back_porch  from 100 to 101 		
 		pinfo.lcdc.h_back_porch = 101;//100;//80;		
 		pinfo.lcdc.h_front_porch = 130;//120		
 		pinfo.lcdc.h_pulse_width = 8;		
 		pinfo.lcdc.v_back_porch = 4;	//must > 4,Otherwise,it will increase the burden of clock	huyu		
 		pinfo.lcdc.v_front_porch = 3;		
 		pinfo.lcdc.v_pulse_width = 1;//2;		
+	/* OPPO 2013-03-07 Gousj Modify end */
+#endif
 	pinfo.lcdc.border_clr = 0;	/* blk */
 	pinfo.lcdc.underflow_clr = 0xff;	/* blue */
 	pinfo.lcdc.hsync_skew = 0;
@@ -63,13 +69,13 @@ static int __init mipi_video_orise_720p_pt_init(void)
 	pinfo.fb_num = 2;
 
 	pinfo.mipi.mode = DSI_VIDEO_MODE;
-	pinfo.mipi.pulse_mode_hsa_he = TRUE;
+	pinfo.mipi.pulse_mode_hsa_he = FALSE;
 	pinfo.mipi.hfp_power_stop = TRUE;
-	pinfo.mipi.hbp_power_stop = TRUE;
+	pinfo.mipi.hbp_power_stop = FALSE;
 	pinfo.mipi.hsa_power_stop = FALSE;
-	pinfo.mipi.eof_bllp_power_stop = TRUE;
-	pinfo.mipi.bllp_power_stop = TRUE;
-	pinfo.mipi.traffic_mode = DSI_NON_BURST_SYNCH_EVENT;
+	pinfo.mipi.eof_bllp_power_stop = FALSE;
+	pinfo.mipi.bllp_power_stop = FALSE;
+	pinfo.mipi.traffic_mode = DSI_BURST_MODE;
 	pinfo.mipi.dst_format = DSI_VIDEO_DST_FORMAT_RGB888;
 	pinfo.mipi.vc = 0;
 	pinfo.mipi.rgb_swap = DSI_RGB_SWAP_RGB;

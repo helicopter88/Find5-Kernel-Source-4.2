@@ -2619,13 +2619,6 @@ config MODEM_ERR_ENTER_RAMDUMP
         modem error interrupt been detected,system enter ramdump mode
 # add by zhenwx end 
 
-# add by chendx start
-config CONFIG_OPPO_DEBUG_ASSERT
-	bool "CONFIG_OPPO_DEBUG_ASSERT"
-    default y
-       help 
-        config oppo debug assert
-# add by chendx end 
 config MSM_CPU_PWRCTL
 	bool "Ensures that krait droop detectors are always off"
 	help
