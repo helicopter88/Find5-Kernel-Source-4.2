@@ -1402,8 +1402,12 @@ again:
 	raw_spin_unlock_irqrestore(&logbuf_lock, flags);
 
 	if (retry && console_trylock())
-		goto again;
-
+/* OPPO 2013-4-18 Gousj modify for black screen */
+		{
+			retry = 0;
+			goto again;
+		}
+/* OPPO 2013-4-18 Gousj modify end */
 	if (wake_klogd)
 		wake_up_klogd();
 }
