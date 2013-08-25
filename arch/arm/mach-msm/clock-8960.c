@@ -4111,7 +4111,6 @@ static struct clk_freq_tbl clk_tbl_tv[] = {
 };
 #else
 static struct clk_freq_tbl clk_tbl_tv[] = {
-	F_END
 };
 #endif
 

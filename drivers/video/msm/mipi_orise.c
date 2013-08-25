@@ -360,7 +360,7 @@ static int mipi_orise_lcd_on(struct platform_device *pdev)
 #ifdef MIPI_CMD_INIT
 	if(flag_lcd_resume)
 	{
-		//printk("huyu-------%s: lcd resume!\n",__func__);
+		printk("huyu-------%s: lcd resume!\n",__func__);
 		if(!flag_lcd_reset){
 			mipi_dsi_cmds_tx(&orise_tx_buf, cmd_mipi_resume_sequence,
 				ARRAY_SIZE(cmd_mipi_resume_sequence));
@@ -370,7 +370,7 @@ static int mipi_orise_lcd_on(struct platform_device *pdev)
 				ARRAY_SIZE(cmd_mipi_initial_sequence));
 			printk("huyu-------%s: lcd ESD reset initial!\n",__func__);
 			mdelay(130);
-			//printk("huyu-------%s: lcd cmd_brightness_setting!\n",__func__);
+			printk("huyu-------%s: lcd cmd_brightness_setting!\n",__func__);
 			mipi_dsi_cmds_tx(&orise_tx_buf, cmd_brightness_setting,
 				ARRAY_SIZE(cmd_brightness_setting));
 			spin_lock_irqsave(&te_count_lock, flags);
@@ -386,12 +386,12 @@ static int mipi_orise_lcd_on(struct platform_device *pdev)
 		schedule_delayed_work(&techeck_work, msecs_to_jiffies(5000));
 	}
 	else{
-		//printk("huyu-------%s: lcd initial!\n",__func__);
+		printk("huyu-------%s: lcd initial!\n",__func__);
 		mipi_dsi_cmds_tx(&orise_tx_buf, cmd_mipi_initial_sequence,
 			ARRAY_SIZE(cmd_mipi_initial_sequence));
-		//printk("huyu-------%s: lcd initial!\n",__func__);
+		printk("huyu-------%s: lcd initial!\n",__func__);
 		mdelay(130);
-		//printk("huyu-------%s: lcd cmd_brightness_setting!\n",__func__);
+		printk("huyu-------%s: lcd cmd_brightness_setting!\n",__func__);
 		mipi_dsi_cmds_tx(&orise_tx_buf, cmd_brightness_setting,
 			ARRAY_SIZE(cmd_brightness_setting));
 		flag_lcd_resume = true;
@@ -540,13 +540,13 @@ static irqreturn_t TE_irq_thread_fn(int irq, void *dev_id)
 	spin_lock_irqsave(&te_count_lock, flags);
 	te_count ++;
 	spin_unlock_irqrestore(&te_count_lock, flags);
-	//printk("huyu------%s: te_count = %d\n",__func__, te_count);
+	printk("huyu------%s: te_count = %d\n",__func__, te_count);
 	return IRQ_HANDLED;
 }
 
 static void techeck_work_func( struct work_struct *work )
 {
-	//printk("huyu------%s: te_count = %d \n",__func__, te_count);
+	printk("huyu------%s: te_count = %d \n",__func__, te_count);
 	if(flag_lcd_off) 
 	{
 	

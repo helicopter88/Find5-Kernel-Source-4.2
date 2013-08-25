@@ -406,6 +406,7 @@ struct msm_panel_common_pdata {
 #ifdef CONFIG_MSM_BUS_SCALING
 	struct msm_bus_scale_pdata *mdp_bus_scale_table;
 #endif
+	int mdp_rev;
 	void *power_on_set_1;
 	void *power_on_set_2;
 	void *power_on_set_3;
@@ -416,7 +417,6 @@ struct msm_panel_common_pdata {
 	void *power_off_set_2;
 	ssize_t power_off_set_size_1;
 	ssize_t power_off_set_size_2;
-	int mdp_rev;
 	u32 ov0_wb_size;  /* overlay0 writeback size */
 	u32 ov1_wb_size;  /* overlay1 writeback size */
 	u32 mem_hid;
