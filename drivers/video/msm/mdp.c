@@ -44,6 +44,11 @@
 #endif
 #include "mipi_dsi.h"
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#undef CONFIG_HAS_EARLYSUSPEND
+#endif
+
+
 /* OPPO 2013-02-05 zhengzk Add begin for fix mdp underrun */
 #define FORBID_POWER_COLLAPSE
 
