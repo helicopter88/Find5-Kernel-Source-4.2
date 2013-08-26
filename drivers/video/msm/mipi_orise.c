@@ -302,7 +302,7 @@ static struct dsi_cmd_desc cmd_mipi_off_sequence[] = {
 static int operate_display_switch(void)
 {
 	int ret = 0;
-	printk("%s:state=%d.\n", __func__, te_state);
+    //printk("%s:state=%d.\n", __func__, te_state);
 	
 	spin_lock_irqsave(&te_state_lock, flags);
 	if(te_state)
@@ -556,12 +556,12 @@ static void techeck_work_func( struct work_struct *work )
 	}
 	if(te_count < 80)
 	{
-		printk("huyu------%s: lcd resetting ! te_count = %d \n",__func__,te_count);
-		printk("irq_state=%d\n", irq_state);
+	    //printk("huyu------%s: lcd resetting ! te_count = %d \n",__func__,te_count);
+	    //printk("irq_state=%d\n", irq_state);
 		flag_lcd_resume = true;
 
 		spin_lock_irqsave(&te_count_lock, flags);
-	//	flag_lcd_reset = true;
+	    //flag_lcd_reset = true;
 		spin_unlock_irqrestore(&te_count_lock, flags);
 		operate_display_switch();
 		
