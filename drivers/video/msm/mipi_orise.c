@@ -255,9 +255,9 @@ static struct dsi_cmd_desc cmd_mipi_initial_sequence[] = {
 		{DTYPE_DCS_WRITE1, 1, 0, 0, 10,
 			sizeof(te_out), te_out},
 		{DTYPE_DCS_WRITE, 1, 0, 0, 10,
-			sizeof(display_on), display_on},
-		{DTYPE_DCS_WRITE, 1, 0, 0, 10,
 			sizeof(sleep_out), sleep_out},
+		{DTYPE_DCS_WRITE, 1, 0, 0, 10,
+			sizeof(display_on), display_on},
 };
 
 static struct dsi_cmd_desc cmd_mipi_resume_sequence[] = {
@@ -268,9 +268,10 @@ static struct dsi_cmd_desc cmd_mipi_resume_sequence[] = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 10,
 		sizeof(te_out), te_out},
 	{DTYPE_DCS_WRITE, 1, 0, 0, 0,
-		sizeof(display_on), display_on},
-	{DTYPE_DCS_WRITE, 1, 0, 0, 0,
 		sizeof(sleep_out), sleep_out},
+	{DTYPE_DCS_WRITE, 1, 0, 0, 0,
+		sizeof(display_on), display_on},
+	
 };
 
 static struct dsi_cmd_desc cmd_brightness_setting[] = {
@@ -560,7 +561,7 @@ static void techeck_work_func( struct work_struct *work )
 		flag_lcd_resume = true;
 
 		spin_lock_irqsave(&te_count_lock, flags);
-		flag_lcd_reset = true;
+	//	flag_lcd_reset = true;
 		spin_unlock_irqrestore(&te_count_lock, flags);
 		operate_display_switch();
 		
